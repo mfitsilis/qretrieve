@@ -4,17 +4,20 @@ require(htmltab)
 require(RCurl)
 require(stringr)
 
-#use to get full table in results
-#for downloading of the files curl can be used
-
-#fileout1.txt is needed as input with the table fields
-
-#pdf link is missing when a question has been withdrawn
-
-#can get table with htmltab - easy as only 1 table!
-#getNodeSet can be used for the option lists
-#only downside - greek letters don't display in Rstudio (uses UTF-16) - but they extract just fine to csv
-#option list show nice in Rstudio but don't extract nice, after converting to data.frames
+#https://gist.github.com/drammock/9e152746a9f99d56a6ec
+#needed to save tables to file in utf8
+save.utf8 <- function(df, file, sep=",", quote=FALSE) {
+  con <- file(file, open="wb", encoding="UTF-8")
+  mat <- as.matrix(df)
+  header <- colnames(df)
+  writeLines(paste(header, collapse=sep), con, useBytes=TRUE)
+  invisible(apply(mat, 1, function(i) {
+    if(quote) line <- sapply(i, function(j) paste0("\"", j, "\"", collapse=""))
+    else      line <- i
+    writeLines(paste(line, collapse=sep), con, useBytes=TRUE)
+  }))
+  close(con)
+}
 
 readfileout <- function(filename){ #read txt file
   con=file(filename,"r") 
@@ -23,140 +26,200 @@ readfileout <- function(filename){ #read txt file
   header
 }
 
-#dir1<-"c:/docs/parl"
-setwd(dir1) #set directory
+#currentDir<-getwd() 
+currentDir<-"c:/docs/parl/qretrieve/out"
+setwd(currentDir) #set directory
 
-#the queries look like this
-url<- "https://www.hellenicparliament.gr/Koinovouleftikos-Elenchos/Mesa-Koinovouleutikou-Elegxou?subject=&protocol=&ministry=&datefrom=&dateto=&type=63c1d403-0d19-409f-bb0d-055e01e1487c&SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218&partyId=&mpId=&pageNo=&SortBy=ake&SortDirection=asc"
+result<-c(NULL)
+pages<-c(NULL)
 
-# since we're interested in Questions       - type=63c1d403-0d19-409f-bb0d-055e01e1487c
+# Questions                                 - type=63c1d403-0d19-409f-bb0d-055e01e1487c
 # and for the session 05.02.2015-28.08.2015 - SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218
 
-#first let's get the following 4 option tables:
 # ddSessionPeriod
 # ddtype
 # ddPoliticalParties
 # ddMps
-#let's extract those from the previous page - for every parl. session ddPoliticalParties and ddMps may be different 
 
-t1 <- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
-t1 <- htmlParse(t1)
-
-options <- getNodeSet(xmlRoot(t1),"//select[@id='ddtype']/option")
-ids_ddtype <- sapply(options, xmlGetAttr, "value")
-ddtype <- sapply(options, xmlValue)
-
-options <- getNodeSet(xmlRoot(t1),"//select[@id='ddSessionPeriod']/option")
-ids_sesper <- sapply(options, xmlGetAttr, "value")
-sesper <- sapply(options, xmlValue)
-
-options <- getNodeSet(xmlRoot(t1),"//select[@id='ddPoliticalParties']/option")
-ids_polpar <- sapply(options, xmlGetAttr, "value")
-polpar <- sapply(options, xmlValue)
-
-options <- getNodeSet(xmlRoot(t1),"//select[@id='ddMps']/option")
-ids_mps <- sapply(options, xmlGetAttr, "value")
-mps <- sapply(options, xmlValue)
-
+ids_sesper<-c(NULL)
+ids_ddtype<-c(NULL)
+#create 4 files/tables with query types,session periods,political parties and parliament members
+writeQueryTables <- function(){
+  #the queries look like this
+  url<- "https://www.hellenicparliament.gr/Koinovouleftikos-Elenchos/Mesa-Koinovouleutikou-Elegxou?subject=&protocol=&ministry=&datefrom=&dateto=&type=63c1d403-0d19-409f-bb0d-055e01e1487c&SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218&partyId=&mpId=&pageNo=&SortBy=ake&SortDirection=asc"
+  
+  t1 <- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
+  t1 <- htmlParse(t1)
+  
+  options <- getNodeSet(xmlRoot(t1),"//select[@id='ddtype']/option")
+  ids_ddtype <- sapply(options, xmlGetAttr, "value")
+  ddtype <- sapply(options, xmlValue)
+  
+  options <- getNodeSet(xmlRoot(t1),"//select[@id='ddSessionPeriod']/option")
+  ids_sesper <- sapply(options, xmlGetAttr, "value")
+  sesper <- sapply(options, xmlValue)
+  
+  options <- getNodeSet(xmlRoot(t1),"//select[@id='ddPoliticalParties']/option")
+  ids_polpar <- sapply(options, xmlGetAttr, "value")
+  polpar <- sapply(options, xmlValue)
+  
+  options <- getNodeSet(xmlRoot(t1),"//select[@id='ddMps']/option")
+  ids_mps <- sapply(options, xmlGetAttr, "value")
+  mps <- sapply(options, xmlValue)
+  
 #now let's write those to files (UTF-16, should work in Excel - https://stackoverflow.com/questions/29957678/utf-8-characters-get-lost-when-converting-from-list-to-data-frame-in-r)
-df1<- data.frame(ID=ids_ddtype, Name=ddtype)
-write.table(df1,'parl_ddtype.csv')
-df2<- data.frame(ID=ids_sesper, Name=sesper)
-write.table(df2,'parl_sesper.csv')
-df3<- data.frame(ID=ids_polpar, Name=polpar)
-write.table(df3,'parl_polpar.csv')
-df4<- data.frame(ID=ids_mps, Name=mps)
-write.table(df4,'parl_mps.csv')
+  df1<- data.frame(ID=ids_ddtype, Name=ddtype)
+  save.utf8(df1,'parl_ddtype.csv')
+  df2<- data.frame(ID=ids_sesper, Name=sesper)
+  save.utf8(df2,'parl_sesper.csv')
+  df3<- data.frame(ID=ids_polpar, Name=polpar)
+  save.utf8(df3,'parl_polpar.csv')
+  df4<- data.frame(ID=ids_mps, Name=mps)
+  save.utf8(df4,'parl_mps.csv')
+  
+}
 
-# let's set the session period and also datatype to Question
-sp<- ... #27 #ids_sesper[3] #11] #1st item in list is [3]!
-dt<- ... #ids_ddtype[2]
-
-#now we'll build the url
-#this is the homepage
+sp=NULL
+dt=NULL
 url0<- "https://www.hellenicparliament.gr"
-q0<-"/Koinovouleftikos-Elenchos/Mesa-Koinovouleutikou-Elegxou?"
-q1<-"subject="
-q2<-"&protocol="
-#q3<-"&type=63c1d403-0d19-409f-bb0d-055e01e1487c"
-q3<-paste("&type=",ids_ddtype[dt],sep="")
-#q4<-"&SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218"
-q4<-paste("&SessionPeriod=",ids_sesper[sp],sep="")
-q5<-"&partyId="
-q6<-"&mpId="
-q7<-"&ministry="
-q8<-"&datefrom="
-q9<-"&dateto="
-q10<-"&pageNo="
-q11<-"&SortBy=ake&SortDirection=asc"
-#q10<-paste("&pageNo=",pn,sep="")
-url<- paste(url0,q0,q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,sep="")
-
-#now let's read the 1st page
-
-t1 <- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
-t1 <- htmlParse(t1)
-
-#we'll use htmltab to extract the table, we're lucky there's only one table in the page, so we don't specify location
-t2<- htmltab(doc = t1,which=1)
-cname<- colnames(t2)[1] #get header
-#pagenum has total num of result pages - we'll use them in q10<-"pageNo="
-cnums<-as.numeric(unique(unlist(regmatches(cname, gregexpr("[0-9]+", cname))))) #extract total num, cur page, total page num
-pagenum<- cnums[3]
-qtotnum<- cnums[1]
-#write table to file with no header and without last line - are irrelevant
-
-#now lets query all pages and collect the results into one dataframe
-
-t51=readfileout("fileout1.txt") #file contains the header with 12 fields - one entry per line
-
-totnum=pagenum # dowload how many pages : 1 - pagenum
-a5=c(NULL)
-for(i in 1:totnum){
-  #i=613
-  url<-paste(url0,q0,q1,q2,q3,q4,q5,q6,q7,q8,q9,"&SortBy=ake&SortDirection=asc",q10,i,sep="")
+getFullUrl <- function(sp,dt,page){
+  q0<-"/Koinovouleftikos-Elenchos/Mesa-Koinovouleutikou-Elegxou?"
+  q1<-"subject="
+  q2<-"&protocol="
+  #q3<-"&type=63c1d403-0d19-409f-bb0d-055e01e1487c"
+  q3<-paste("&type=",ids_ddtype[dt],sep="")
+  #q4<-"&SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218"
+  q4<-paste("&SessionPeriod=",ids_sesper[sp],sep="")
+  q5<-"&partyId="
+  q6<-"&mpId="
+  q7<-"&ministry="
+  q8<-"&datefrom="
+  q9<-"&dateto="
+  q11<-"&SortBy=ake&SortDirection=asc"
+  q10<-ifelse(page>0,paste("&pageNo=",page,sep=""),paste("&pageNo="))
+  url<- paste(url0,q0,q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,sep="")
+  return(url)
+}
+# sp [from,to]
+# dt c(2,3,4)
+# todo input lists...
+selectPeriodsDataTypes <- function(sp=1,dt=2){
+  sp<-sp
+  dt<-dt
+  t51<-readfileout("../fileout1.txt") #file contains the header with 12 fields - one entry per line
+  url<-getFullUrl(sp,dt,0)
+  #now let's read the 1st page
+  
   t1<- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
   t1<- htmlParse(t1)
-  t2<- htmltab(doc = t1,rm_nodata_cols = F,which=1)
-  #print(paste("t2",nrow(a3),ncol(a3)))
-  t2<- t2[,1:4]
-  t2<-t2[1:nrow(t2)-1,] #remove last row
   
-  #now get the links from the table
-  g1<-as.character(getNodeSet(xmlRoot(t1), "//a/@href")) #filter xml for href
-  l1=c(NULL) #using for loop slows things down - sapply would be faster
-  for(j in 1:length(g1)){  #the links should have ?pcm_id=
-    l1[j]=length(unlist(strsplit(g1[j],"[?=]"))) # result should be 3
-  }
-  
-  g2<-g1[which(l1==3)]  #these should be the links
-  g2<- paste(url0,g2,sep="")
-  #append links as last column
-  g3<-cbind(t2,data.frame(g2))  
-  
-  #now get the fields after the link
-  a1=c(NULL)
-  for(k in 1:length(g2)){
-    #k=3
-    t3<-getURL(g3[k,5],.opts = list(ssl.verifypeer = FALSE) )
-    t4<- htmlParse(t3)
-    t5 <- xpathSApply(t4, "//dt", xmlValue) # titles
-    t6 <- xpathSApply(t4, "//dd", xmlValue) # values
-    t6<-gsub("\\r\\n","-",t6)   # if length=13 discard 8th field : Information (empty)
-    t6<-gsub("\\t","",t6)
-    
-    #write the header to fileout2 to compare to t51 - because of unicode encoding in R it doesn't work correctly otherwise
-    write.table(iconv(t5,from="",to=""),file="fileout2.txt",row.names = F,quote = F, col.names = F)
-    t52=readfileout("fileout2.txt")
-    
-    t53<-match(t52,t51)  #position of the field or NA if not available
-    t54<-match(seq(12),t53)
-    t55<-c(NULL) 
-    for (j in 1:12){ #copy correct element or empty string
-      t55<-c(t55,ifelse(is.na(t54[j]),"",t6[t54[j]]))
+  #we'll use htmltab to extract the table, we're lucky there's only one table in the page, so we don't specify location
+  t2<- tryCatch(htmltab(doc = t1,which=1,rm_nodata_cols=F),
+                error = function(e)e,warning = function(w)w
+  )
+  cname<- colnames(t2)[1] #get header
+  #pagenum has total num of result pages - we'll use them in q10<-"pageNo="
+  cnums<-as.numeric(unique(unlist(regmatches(cname, gregexpr("[0-9]+", cname))))) #extract total num, cur page, total page num
+  pagenum<- cnums[3]
+  qtotnum<- cnums[1]
+
+  print(paste("total results:",qtotnum,"| number of pages:",pagenum))
+  period<-c(sp,dt,qtotnum)
+  return(period)
+}
+# create a sublist of the total result
+# num selects how many links to get - up to total results
+# num can be single value or a range
+# prc overrides num and gets percentage of links
+createRandomList <- function(qtotnum,num=500,prc=0) {
+  if(exists("qtotnum")) {
+    if(length(num)==2){
+      num1<-num[1]
+      num2<-num[2]
+      if(num1>qtotnum){
+        num1<-qtotnum
+      }
+      if(num2>qtotnum){
+        num2<-qtotnum
+      }
+      if(num1<1){
+        num1<-1
+      }
+      if(num2<1){
+        num2<-1
+      }
+      res<-seq(num1,num2)
     }
-    t6<-t55 # copy to initial vector
+    else if(length(num)==1) { 
+      if(num>qtotnum) {
+          num<-qtotnum
+          res<-sample(seq(1,qtotnum),num)
+        } else {
+          res<-sample(seq(1,qtotnum),num)
+        } 
+      if(prc>0) {
+        num<-round(qtotnum*prc/100)
+        if(num>qtotnum) {
+          num<-qtotnum
+        } 
+        res<-sample(seq(1,qtotnum),num)
+      }
+      print(res)
+    }
+    return(res)
+  }
+  else {
+    return(c(NULL))
+  }
+}
+
+# num=0 -> download whole page number=page
+# num>0 -> download from page number=page item=num
+pageScrape <-function(period,page, num) {
+    t51<-readfileout("../fileout1.txt") #file contains the header with 12 fields - one entry per line
+    url<-getFullUrl(period[1],period[2],page)
+    t1<- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
+    t1<- htmlParse(t1)
+    t2<- htmltab(doc = t1,rm_nodata_cols = F,which=1)
+    #print(paste("t2",nrow(a3),ncol(a3)))
+    t2<- t2[,1:4]
+    t2<-t2[1:nrow(t2)-1,] #remove last row
     
+    #now get the links from the table
+    g1<-as.character(getNodeSet(xmlRoot(t1), "//a/@href")) #filter xml for href
+    l1=c(NULL) #using for loop slows things down - sapply would be faster
+    for(j in 1:length(g1)){  #the links should have ?pcm_id=
+      l1[j]=length(unlist(strsplit(g1[j],"[?=]"))) # result should be 3
+    }
+    
+    g2<-g1[which(l1==3)]  #these should be the links
+    g2<- paste(url0,g2,sep="")
+    #append links as last column
+    g3<-cbind(t2,data.frame(g2))  
+    
+    #now get the fields after the link
+    a1=c(NULL)
+    for(k in 1:length(g2)){
+      #k=3
+      t3<-getURL(g3[k,5],.opts = list(ssl.verifypeer = FALSE) )
+      t4<- htmlParse(t3)
+      t5 <- xpathSApply(t4, "//dt", xmlValue) # titles
+      t6 <- xpathSApply(t4, "//dd", xmlValue) # values
+      t6<-gsub("\\r\\n","-",t6)   # if length=13 discard 8th field : Information (empty)
+      t6<-gsub("\\t","",t6)
+      
+      #write the header to fileout2 to compare to t51 - because of unicode encoding in R it doesn't work correctly otherwise
+      write.table(iconv(t5,from="",to=""),file="../fileout2.txt",row.names = F,quote = F, col.names = F)
+      t52=readfileout("../fileout2.txt")
+      
+      t53<-match(t52,t51)  #position of the field or NA if not available
+      t54<-match(seq(12),t53)
+      t55<-c(NULL) 
+      for (j in 1:12){ #copy correct element or empty string
+        t55<-c(t55,ifelse(is.na(t54[j]),"",t6[t54[j]]))
+      }
+      t6<-t55 # copy to initial vector
+      
       t7<-as.character(getNodeSet(xmlRoot(t4), "//a/@href")) #1st is question - rest are answer files
       t8<-substr(t7,str_length(t7)-2,str_length(t7))
       t9<-which(t8=="pdf") #only keep links ending in "pdf"
@@ -167,27 +230,50 @@ for(i in 1:totnum){
       if(length(t10)>1){ #answer files
         t6[12]<-toString(t10[-1])
       }
-     
+      
       t61<-unlist(str_split(unlist(str_split(t6[11],"/"))[6],".pdf"))[1] #just the question link
       t61<-ifelse(is.na(t61),"",t61) 
       t6<-c(t6,t61) #add link as 13th field
       
       #print(length(t6))
+      
+      a1<-iconv(c(a1,t6),from="",to="") #necessary character conversion
+    }
     
-    a1<-iconv(c(a1,t6),from="",to="") #necessary character conversion
-  }
-  
-  a2<-matrix(a1,nrow = length(t6))  #convert vector to matrix
-  a3<-cbind(g3,t(a2))  #append the fields at the end of the table
-
-  #change column titles - use only english names because greek characters cannot be saved reliably in r script despite utf-8 encoding
-  colnames(a3)<-c("Protocol Number","Date","Type","Subject","Link","Number","Type","Session/Period","Subject","Party","Date","Date Last Modified","Submitter","Ministries","Ministers","Question File","Answer Files","link serialNr")
-  
-  #append to last table
-  a5= rbind(a5,a3)
-  print(i) #print page num
+    a2<-matrix(a1,nrow = length(t6))  #convert vector to matrix
+    a3<-cbind(g3,t(a2))  #append the fields at the end of the table
+    
+    #change column titles - use only english names because greek characters cannot be saved reliably in r script despite utf-8 encoding
+    colnames(a3)<-c("Protocol Number","Date","Type","Subject","Link","Number","Type","Session/Period","Subject","Party","Date","Date Last Modified","Submitter","Ministries","Ministers","Question File","Answer Files","link serialNr")
+    
+    print(paste("page:",page)) #print page num
+    if(num==0) {
+      return(a3)
+    }
+    else {
+      return(a3[num,])
+    }
 }
 
-#save to table with # delimiter
-write.table(a5,"result.csv",sep="#",col.names = T,row.names = F, quote=F) #set separator to # because ",; are already used
+#pages is a list of query numbers between 1..qtotnum
+getQueries <- function(period,queries) {
+  result<-c(NULL)
+  for (query in queries) {
+    tableNumber<-floor(query/10)
+    queryNumber<-query%%10
+    res<-pageScrape(period,tableNumber,queryNumber)
+    #append to previous result
+    result<- rbind(result,res)
+  }
+  writeResults(result)
+}
+
+  
+writeResults <- function(res) {
+  write.table(res,"result.csv",sep="#",col.names = T,row.names = F, quote=F) #set separator to # because ",; are already used
+}
+
+writeQueryTables() # write data table to files
+period<- selectPeriodsDataTypes() # select period
+getQueries(period,createRandomList(period[3],1)) # get random results
 
