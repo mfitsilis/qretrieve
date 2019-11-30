@@ -1,11 +1,13 @@
-#source("c:/users/mfitsilis/documents/myr/parl_xml3.r")
+#script that gets random queries for a given period from the hellenic parliament server
 require(XML)
 require(htmltab)
 require(RCurl)
 require(stringr)
 
+session<-{} #object contains data specific to the session period
+
 #https://gist.github.com/drammock/9e152746a9f99d56a6ec
-#needed to save tables to file in utf8
+#needed to save tables to file in UTF-8
 save.utf8 <- function(df, file, sep=",", quote=FALSE) {
   con <- file(file, open="wb", encoding="UTF-8")
   mat <- as.matrix(df)
@@ -19,19 +21,16 @@ save.utf8 <- function(df, file, sep=",", quote=FALSE) {
   close(con)
 }
 
+#reads the 1st row of a file - needed for the table columns of the period and queries (stored in fileout1.txt,fileout2.txt)
 readfileout <- function(filename){ #read txt file
   con=file(filename,"r") 
   header=readLines(con)
   close(con)
-  header
+  return(header)
 }
 
-#currentDir<-getwd() 
-currentDir<-"c:/docs/parl/qretrieve/out"
+currentDir<-paste(getwd(),"/out",sep="")
 setwd(currentDir) #set directory
-
-result<-c(NULL)
-pages<-c(NULL)
 
 # Questions                                 - type=63c1d403-0d19-409f-bb0d-055e01e1487c
 # and for the session 05.02.2015-28.08.2015 - SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218
@@ -41,8 +40,7 @@ pages<-c(NULL)
 # ddPoliticalParties
 # ddMps
 
-ids_sesper<-c(NULL)
-ids_ddtype<-c(NULL)
+
 #create 4 files/tables with query types,session periods,political parties and parliament members
 writeQueryTables <- function(){
   #the queries look like this
@@ -67,7 +65,7 @@ writeQueryTables <- function(){
   ids_mps <- sapply(options, xmlGetAttr, "value")
   mps <- sapply(options, xmlValue)
   
-#now let's write those to files (UTF-16, should work in Excel - https://stackoverflow.com/questions/29957678/utf-8-characters-get-lost-when-converting-from-list-to-data-frame-in-r)
+#now let's write those to files in UTF-8
   df1<- data.frame(ID=ids_ddtype, Name=ddtype)
   save.utf8(df1,'parl_ddtype.csv')
   df2<- data.frame(ID=ids_sesper, Name=sesper)
@@ -77,19 +75,19 @@ writeQueryTables <- function(){
   df4<- data.frame(ID=ids_mps, Name=mps)
   save.utf8(df4,'parl_mps.csv')
   
+  session$type<<-ids_ddtype
+  session$period<<-ids_sesper
 }
 
-sp=NULL
-dt=NULL
-url0<- "https://www.hellenicparliament.gr"
+#gets the url for a page of queries for a given period(sq,dt)
 getFullUrl <- function(sp,dt,page){
   q0<-"/Koinovouleftikos-Elenchos/Mesa-Koinovouleutikou-Elegxou?"
   q1<-"subject="
   q2<-"&protocol="
   #q3<-"&type=63c1d403-0d19-409f-bb0d-055e01e1487c"
-  q3<-paste("&type=",ids_ddtype[dt],sep="")
+  q3<-paste("&type=",session$type[dt],sep="")
   #q4<-"&SessionPeriod=ef3c0f44-85cc-4dad-be0c-a43300bca218"
-  q4<-paste("&SessionPeriod=",ids_sesper[sp],sep="")
+  q4<-paste("&SessionPeriod=",session$period[sp],sep="")
   q5<-"&partyId="
   q6<-"&mpId="
   q7<-"&ministry="
@@ -97,15 +95,13 @@ getFullUrl <- function(sp,dt,page){
   q9<-"&dateto="
   q11<-"&SortBy=ake&SortDirection=asc"
   q10<-ifelse(page>0,paste("&pageNo=",page,sep=""),paste("&pageNo="))
+  url0<- "https://www.hellenicparliament.gr"
   url<- paste(url0,q0,q1,q2,q3,q4,q5,q6,q7,q8,q9,q10,q11,sep="")
   return(url)
 }
-# sp [from,to]
-# dt c(2,3,4)
-# todo input lists...
+
+#returns the period as a vector of sp,dt,qtotnum
 selectPeriodsDataTypes <- function(sp=1,dt=2){
-  sp<-sp
-  dt<-dt
   t51<-readfileout("../fileout1.txt") #file contains the header with 12 fields - one entry per line
   url<-getFullUrl(sp,dt,0)
   #now let's read the 1st page
@@ -124,14 +120,16 @@ selectPeriodsDataTypes <- function(sp=1,dt=2){
   qtotnum<- cnums[1]
 
   print(paste("total results:",qtotnum,"| number of pages:",pagenum))
-  period<-c(sp,dt,qtotnum)
-  return(period)
+  session$sp<<-sp
+  session$dt<<-dt
+  session$qtotnum<<-qtotnum
 }
 # create a sublist of the total result
 # num selects how many links to get - up to total results
 # num can be single value or a range
 # prc overrides num and gets percentage of links
-createRandomList <- function(qtotnum,num=500,prc=0) {
+createRandomList <- function(num=500,prc=0) {
+  qtotnum<-session$qtotnum
   if(exists("qtotnum")) {
     if(length(num)==2){
       num1<-num[1]
@@ -175,9 +173,10 @@ createRandomList <- function(qtotnum,num=500,prc=0) {
 
 # num=0 -> download whole page number=page
 # num>0 -> download from page number=page item=num
-pageScrape <-function(period,page, num) {
+pageScrape <-function(page, num) {
+    url0<- "https://www.hellenicparliament.gr"
     t51<-readfileout("../fileout1.txt") #file contains the header with 12 fields - one entry per line
-    url<-getFullUrl(period[1],period[2],page)
+    url<-getFullUrl(session$sp,session$dt,page)
     t1<- getURL(url,.opts = list(ssl.verifypeer = FALSE) )
     t1<- htmlParse(t1)
     t2<- htmltab(doc = t1,rm_nodata_cols = F,which=1)
@@ -255,25 +254,26 @@ pageScrape <-function(period,page, num) {
     }
 }
 
-#pages is a list of query numbers between 1..qtotnum
-getQueries <- function(period,queries) {
+#period is returned by selectPeriodsDataTypes
+#queries is a list of query numbers between 1..qtotnum
+getQueries <- function(queries) {
   result<-c(NULL)
   for (query in queries) {
     tableNumber<-floor(query/10)
     queryNumber<-query%%10
-    res<-pageScrape(period,tableNumber,queryNumber)
+    res<-pageScrape(tableNumber,queryNumber)
     #append to previous result
     result<- rbind(result,res)
   }
   writeResults(result)
 }
 
-  
+#write table to file
 writeResults <- function(res) {
   write.table(res,"result.csv",sep="#",col.names = T,row.names = F, quote=F) #set separator to # because ",; are already used
 }
 
 writeQueryTables() # write data table to files
-period<- selectPeriodsDataTypes() # select period
-getQueries(period,createRandomList(period[3],1)) # get random results
+selectPeriodsDataTypes() # select period
+getQueries(createRandomList(1)) # get random results
 
