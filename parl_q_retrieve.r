@@ -21,6 +21,7 @@ save.utf8 <- function(df, file, sep=",", quote=FALSE) {
   close(con)
 }
 
+#fileout1.txt contains the header - fileout2.txt is created
 #reads the 1st row of a file - needed for the table columns of the period and queries (stored in fileout1.txt,fileout2.txt)
 readfileout <- function(filename){ #read txt file
   con=file(filename,"r") 
