@@ -5,6 +5,7 @@ require(RCurl)
 require(stringr)
 
 session<-{} #object contains data specific to the session period
+session$headerSet<-F
 
 #https://gist.github.com/drammock/9e152746a9f99d56a6ec
 #needed to save tables to file in UTF-8
@@ -157,7 +158,7 @@ createRandomList <- function(num=500,prc=0) {
           res<-sample(seq(1,qtotnum),num)
         } 
       if(prc>0) {
-        num<-round(qtotnum*prc/100)
+        num<-round(qtotnum*prc)
         if(num>qtotnum) {
           num<-qtotnum
         } 
@@ -195,7 +196,7 @@ pageScrape <-function(page, num) {
     g2<-g1[which(l1==3)]  #these should be the links
     g2<- paste(url0,g2,sep="")
     #append links as last column
-    g3<-cbind(t2,data.frame(g2))  
+    g3<-cbind(t2,data.frame(g2))
     
     #now get the fields after the link
     a1=c(NULL)
@@ -247,10 +248,11 @@ pageScrape <-function(page, num) {
     colnames(a3)<-c("Protocol Number","Date","Type","Subject","Link","Number","Type","Session/Period","Subject","Party","Date","Date Last Modified","Submitter","Ministries","Ministers","Question File","Answer Files","link serialNr")
     
     print(paste("page:",page)) #print page num
-    if(num==0) {
+    if(num==-1) {
       return(a3)
     }
     else {
+      num<-1+(num%%10)
       return(a3[num,])
     }
 }
@@ -266,15 +268,26 @@ getQueries <- function(queries) {
     #append to previous result
     result<- rbind(result,res)
   }
-  writeResults(result)
+  writeResults(result, !session$headerSet)
+  session$headerSet<-T
 }
 
 #write table to file
-writeResults <- function(res) {
-  write.table(res,"result.csv",sep="#",col.names = T,row.names = F, quote=F) #set separator to # because ",; are already used
+writeResults <- function(res,header) {
+  write.table(res,"result.csv",sep="#",col.names = header,row.names = F, quote=F, append = T) #set separator to # because ",; are already used
 }
 
 writeQueryTables() # write data table to files
-selectPeriodsDataTypes() # select period
-getQueries(createRandomList(1)) # get random results
+#type 2,9
+#period 27-32
+#selectPeriodsDataTypes() # select period
+session$headerSet<<-F
+for (type in c(2,9)) {
+  for (sp in 27:32) {
+    selectPeriodsDataTypes(sp,type)
+    getQueries(createRandomList(0,0.014243797))
+  }    
+}
+
+#getQueries(createRandomList(1)) # get random results
 
