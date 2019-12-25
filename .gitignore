@@ -1,1 +1,3 @@
 *.csv
+.Rhistory
+fileout2.txt
