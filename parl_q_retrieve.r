@@ -281,7 +281,7 @@ writeQueryTables() # write data table to files
 #type 2,9
 #period 27-32
 #selectPeriodsDataTypes() # select period
-session$headerSet<<-F
+session$headerSet<-F
 for (type in c(2,9)) {
   for (sp in 27:32) {
     selectPeriodsDataTypes(sp,type)
